@@ -1,7 +1,8 @@
   /* --------------------  rexx procedure  -------------------- *
   | Name:      PDS2PDSE                                        |
   |                                                            |
-  | Function:  Create a copy of a PDS as a PDSE                |
+  | Function:  Create a copy of a PDS as a PDSE with Member    |
+  |             generations enabled.                           |
   |                                                            |
   | Syntax:    %PDS2PDSE from-pds to-pdse options              |
   |                                                            |
