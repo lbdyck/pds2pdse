@@ -20,6 +20,7 @@
   | Author:    Lionel B. Dyck                                  |
   |                                                            |
   | History:  (most recent on top)                             |
+  |            05/26/21 - Support PROFILE NOPREFIX users       |
   |            05/26/21 - Default maxgen to system max         |
   |                     - Add SWAP option                      |
   |            05/02/18 - Cleanup and Add Comments             |
@@ -48,6 +49,11 @@
   * ------------------------ */
   parse value options with from to options
 
+  /* ------------------- *
+  | Define our defaults |
+  * ------------------- */
+  parse value '' with null mg volser swap
+
   /* -------------------------------------- *
   | Validate the FROM and TO dataset names |
   * -------------------------------------- */
@@ -61,11 +67,6 @@
     msg = 'To DSN exists:' "'"to"'"
     call do_syntax
   end
-
-  /* ------------------- *
-  | Define our defaults |
-  * ------------------- */
-  parse value '' with null mg volser swap
 
   /* ---------------------------- *
   | Process the provided options |
@@ -196,24 +197,23 @@ Do_Syntax:
   | - not fully qualified                 |
   |   - prepend user prefix or userid     |
   * ------------------------------------- */
-Fixup_dsname: procedure
+Fixup_dsname: procedure expose null
   arg dsname
   if dsname = null then return
   if left(dsname,1) = "'" then do
-    wdsn = substr(dsname,2,length(dsname)-2)
+    return substr(dsname,2,length(dsname)-2)
   end
   else do
     if sysvar('syspref') = null
     then do
       hlq = sysvar('sysuid')
-      wdsn = dsname
+      return hlq'.'dsname
     end
     else do
       hlq = sysvar('syspref')
-      wdsn = hlq'.'dsname
+      return hlq'.'dsname
     end
   end
-  return wdsn
 
 Get_MaxGen: Procedure
   /* ----------------------------- *
