@@ -11,6 +11,7 @@
   |                                                            |
   |            options:                                        |
   |            MG(nnn)   - Member generation count             |
+  |                        * defaults to system limit          |
   |            VOL(vol)  - defines the volser for the to pdse  |
   |            SWAP      - rename To to From and vice versa    |
   |                        append .O to end of From            |
