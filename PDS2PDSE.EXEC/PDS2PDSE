@@ -1,0 +1,226 @@
+  /* --------------------  rexx procedure  -------------------- *
+  | Name:      PDS2PDSE                                        |
+  |                                                            |
+  | Function:  Create a copy of a PDS as a PDSE                |
+  |                                                            |
+  | Syntax:    %PDS2PDSE from-pds to-pdse options              |
+  |                                                            |
+  |            from-pds  - from PDS Dsname                     |
+  |            to-pdse   - target PDSE                         |
+  |                                                            |
+  |            options:                                        |
+  |            MG(nnn)   - Member generation count             |
+  |            VOL(vol)  - defines the volser for the to pdse  |
+  |            SWAP      - rename To to From and vice versa    |
+  |                        append .O to end of From            |
+  |                                                            |
+  | Dependencies:                                              |
+  |            Uses the PDS command for the copy               |
+  |                                                            |
+  | Author:    Lionel B. Dyck                                  |
+  |                                                            |
+  | History:  (most recent on top)                             |
+  |            05/26/21 - Default maxgen to system max         |
+  |                     - Add SWAP option                      |
+  |            05/02/18 - Cleanup and Add Comments             |
+  |            05/01/18 - Allow fully qualified or no          |
+  |                       quotes in from/to dsnames            |
+  |            04/30/18 - Creation                             |
+  |                                                            |
+  * ---------------------------------------------------------- */
+  arg options
+
+  /* -------------------------------- *
+  | Validate the provided parameters |
+  * -------------------------------- */
+  if length(options) = 0 then do
+    msg = 'No options provided'
+    call do_syntax
+  end
+
+  if words(options) < 2 then do
+    msg = 'Invalid options provided'
+    call do_syntax
+  end
+
+  /* ------------------------ *
+  | Parse the provided parms |
+  * ------------------------ */
+  parse value options with from to options
+
+  /* -------------------------------------- *
+  | Validate the FROM and TO dataset names |
+  * -------------------------------------- */
+  from = fixup_dsname(from)
+  to   = fixup_dsname(to)
+  if sysdsn("'"from"'") /= 'OK' then do
+    msg = 'From DSN invalid:' from sysdsn("'"from"'")
+    call do_syntax
+  end
+  if sysdsn("'"to"'") = 'OK' then do
+    msg = 'To DSN exists:' "'"to"'"
+    call do_syntax
+  end
+
+  /* ------------------- *
+  | Define our defaults |
+  * ------------------- */
+  parse value '' with null mg volser swap
+
+  /* ---------------------------- *
+  | Process the provided options |
+  * ---------------------------- */
+  if words(options) > 0 then do i = 1 to words(options)
+    Select
+      When wordpos('SWAP',options) > 0 then swap = 1
+      When pos('VOL(',word(options,i)) > 0 then
+      parse value word(options,i) with 'VOL('volser')'
+      When pos('MG(',word(options,i)) > 0 then
+      parse value word(options,i) with 'MG('mg')'
+      Otherwise do
+        msg = word(options,i) 'is an invalid option'
+        call do_syntax
+      end
+    end
+  end
+
+  if mg  = null then mg = get_maxgen()
+
+  /* --------------------------------- *
+  | Get the space for the current PDS |
+  * --------------------------------- */
+  call listdsi "'"from"'"
+  prim = sysprimary
+  sec  = sysseconds
+  unit = left(sysunits,1)
+  if unit = 'T' then unit = 'TRACKS'
+  if unit = 'C' then unit = 'CYLINDERS'
+  if unit = 'B' then do
+    unit = 'TRACKS'
+  end
+
+  if unit = 'TRACKS' then do
+    pt = prim%15
+    if pt = 0 then prim = 15
+    else do
+      pr = prim//15
+      prim = prim + pr
+    end
+  end
+
+  if mg > 0
+  then mg = 'Maxgens('mg')'
+  else mg = null
+
+  if volser /= null
+  then vol = 'VOL('volser')'
+  else vol = null
+
+  Say 'PDS2PDSE - Copy PDS to PDSE'
+  say ' '
+  say 'From PDS:' from
+  say 'To PDSE: ' to
+  if volser /= null then say vol
+  if mg     /= null then say mg
+
+  /* --------------------------------------------- *
+  | Perform the Allocation of the Target/New PDSE |
+  * --------------------------------------------- */
+  "Alloc ds('"to"') new spa("prim sec")" unit mg ,
+    "Like('"from"')" vol "DSNType(Library,2)"
+  /* ------------------- *
+  | Free the Allocation |
+  * ------------------- */
+  "Free ds('"to"')"
+
+  say ' '
+  say 'Invoking the PDS command to do the Copy:'
+  say ' '
+
+  "PDS '"from"' Copy : '"to"' shr nolist"
+
+  if swap = null then exit 0
+
+  say ' '
+  say 'Swapping the dataset names:'
+  say ' '
+
+  say  "rename '"from"' '"from".o'"
+  "rename '"from"' '"from".o'"
+  if rc > 0 then do
+    say 'Rename failed...'
+    exit 8
+  end
+  say  "rename '"to"' '"from"'"
+  "rename '"to"' '"from"'"
+  if rc > 0 then do
+    say 'Rename failed...'
+    exit 8
+  end
+  say  "rename '"from".o' '"to"'"
+  "rename '"from".o' '"to"'"
+  if rc > 0 then do
+    say 'Rename failed...'
+    exit 8
+  end
+
+  Exit 0
+
+  /* ----------------------------- *
+  | Report out the correct Syntax |
+  * ----------------------------- */
+Do_Syntax:
+  say 'PDS2PDSE Command Error:'
+  say msg
+  say ' '
+  say 'Syntax is:'
+  say '   %pds2pdse from-pds to-pdse options'
+  say ' '
+  say '   from-pds is a PDS to be copied into a new PDSE'
+  say ' '
+  say '   to-pdse must not exist and is the name for the new PDSE'
+  say ' '
+  say 'Supported options:'
+  say ' '
+  say '   MG(nnn) - Member generation count '
+  say ' '
+  say '   VOL(volser) - volser for the to-pdse'
+  say ' '
+  say '   SWAP - Swap the dataset names'
+  say ' '
+  exit 8
+
+  /* ------------------------------------- *
+  | Fixup the Dataset Names               |
+  | - fully qualified - remove the quotes |
+  | - not fully qualified                 |
+  |   - prepend user prefix or userid     |
+  * ------------------------------------- */
+Fixup_dsname: procedure
+  arg dsname
+  if dsname = null then return
+  if left(dsname,1) = "'" then do
+    wdsn = substr(dsname,2,length(dsname)-2)
+  end
+  else do
+    if sysvar('syspref') = null
+    then do
+      hlq = sysvar('sysuid')
+      wdsn = dsname
+    end
+    else do
+      hlq = sysvar('syspref')
+      wdsn = hlq'.'dsname
+    end
+  end
+  return wdsn
+
+Get_MaxGen: Procedure
+  /* ----------------------------- *
+  * Get the current MAXGENS_LIMIT *
+  * ----------------------------- */
+  Numeric Digits 10
+  CVT      = C2D(Storage(10,4))
+  CVTDFA   = C2D(Storage(D2X(CVT + 1216),4))   /* cvt + 4c0 */
+  DFAMGEN  = C2D(Storage(D2X(cvtdfa + 76),4))  /* dfa + 4c */
+  return dfamgen
